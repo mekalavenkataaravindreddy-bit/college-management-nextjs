@@ -1,0 +1,326 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model with Role-Based Access Control
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  name          String
+  password      String
+  role          Role       @default(STUDENT)
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Relations
+  student       Student?
+  teacher       Teacher?
+  admin         Admin?
+  sessions      Session[]
+  attendance    Attendance[]
+  testSubmissions TestSubmission[]
+
+  @@index([email])
+  @@index([role])
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+// Student Model
+model Student {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollmentNo    String    @unique
+  department      String
+  semester        Int
+  batch           Int
+  phoneNumber     String?
+  dateOfBirth     DateTime?
+  address         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  courses         CourseEnrollment[]
+  attendance      Attendance[]
+  testSubmissions TestSubmission[]
+
+  @@index([enrollmentNo])
+  @@index([department])
+  @@index([semester])
+}
+
+// Teacher Model
+model Teacher {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId      String    @unique
+  department      String
+  qualification   String
+  phoneNumber     String?
+  dateOfBirth     DateTime?
+  joinDate        DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  courses         Course[]
+  attendance      Attendance[]
+  tests           Test[]
+
+  @@index([employeeId])
+  @@index([department])
+}
+
+// Admin Model
+model Admin {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department      String
+  permissions     String[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+// Course Model
+model Course {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  name            String
+  description     String?
+  credits         Int
+  semester        Int
+  department      String
+  teacherId       String
+  teacher         Teacher   @relation(fields: [teacherId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  enrollments     CourseEnrollment[]
+  tests           Test[]
+  attendance      Attendance[]
+
+  @@index([code])
+  @@index([semester])
+  @@index([department])
+  @@index([teacherId])
+}
+
+// Course Enrollment Model
+model CourseEnrollment {
+  id              String    @id @default(cuid())
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId        String
+  course          Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrolledAt      DateTime  @default(now())
+  grade           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+}
+
+// Attendance Model
+model Attendance {
+  id              String    @id @default(cuid())
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId        String
+  course          Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  date            DateTime
+  status          AttendanceStatus @default(ABSENT)
+  remarks         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([studentId, courseId, date])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([date])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+// Test Model
+model Test {
+  id              String    @id @default(cuid())
+  title           String
+  description     String?
+  courseId        String
+  course          Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacherId       String
+  teacher         Teacher   @relation(fields: [teacherId], references: [id])
+  testType        TestType  @default(QUIZ)
+  totalMarks      Int
+  passingMarks    Int
+  duration        Int       // in minutes
+  scheduledDate   DateTime
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  questions       Question[]
+  submissions     TestSubmission[]
+
+  @@index([courseId])
+  @@index([teacherId])
+  @@index([scheduledDate])
+}
+
+enum TestType {
+  QUIZ
+  MIDTERM
+  FINAL
+  ASSIGNMENT
+}
+
+// Question Model
+model Question {
+  id              String    @id @default(cuid())
+  testId          String
+  test            Test      @relation(fields: [testId], references: [id], onDelete: Cascade)
+  questionNumber  Int
+  questionText    String
+  questionType    QuestionType @default(MULTIPLE_CHOICE)
+  options         String[]  // for multiple choice
+  correctAnswer   String
+  marks           Int
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  answers         Answer[]
+
+  @@unique([testId, questionNumber])
+  @@index([testId])
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  SHORT_ANSWER
+  LONG_ANSWER
+  TRUE_FALSE
+}
+
+// Test Submission Model
+model TestSubmission {
+  id              String    @id @default(cuid())
+  testId          String
+  test            Test      @relation(fields: [testId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  startTime       DateTime  @default(now())
+  endTime         DateTime?
+  totalMarks      Int?
+  obtainedMarks   Int?
+  status          SubmissionStatus @default(IN_PROGRESS)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  answers         Answer[]
+
+  @@unique([testId, studentId])
+  @@index([testId])
+  @@index([studentId])
+  @@index([status])
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EVALUATED
+  GRADED
+}
+
+// Answer Model
+model Answer {
+  id              String    @id @default(cuid())
+  questionId      String
+  question        Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  submissionId    String
+  submission      TestSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  answerText      String?
+  marksObtained   Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([questionId, submissionId])
+  @@index([questionId])
+  @@index([submissionId])
+}
+
+// NextAuth Session Model
+model Session {
+  id            String     @id @default(cuid())
+  sessionToken  String     @unique
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires       DateTime
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([userId])
+}
+
+// Account Model (for OAuth integration if needed)
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// Verification Token Model
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
